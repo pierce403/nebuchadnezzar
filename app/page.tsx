@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/card";
 import { HealthSummary } from "@/components/health-summary";
+import { ProviderWizard } from "@/components/provider-wizard";
 import { StatusPill } from "@/components/status-pill";
 import { useSettings } from "@/components/settings-context";
 import { useApiClient } from "@/lib/useApiClient";
@@ -32,6 +33,14 @@ export default function Home() {
     "idle" | "running" | "success" | "error"
   >("idle");
   const [setupOutput, setSetupOutput] = useState<string | null>(null);
+  const [setupNote, setSetupNote] = useState<string | null>(null);
+  const [setupRanAt, setSetupRanAt] = useState<string | null>(null);
+  const [tunnelStatus, setTunnelStatus] = useState<{
+    ok: boolean;
+    message?: string;
+    log?: string;
+    pid?: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!api) return;
@@ -123,18 +132,77 @@ export default function Home() {
   const runSetup = async () => {
     setSetupStatus("running");
     setSetupOutput(null);
+    setSetupNote(null);
     try {
       const res = await fetch("/api/setup", { method: "POST" });
       const data = await res.json();
       setSetupOutput(data?.output || "");
-      setSetupStatus(data?.ok ? "success" : "error");
+      const ok = Boolean(data?.ok);
+      setSetupStatus(ok ? "success" : "error");
+      const ts = new Date().toLocaleString();
+      setSetupRanAt(ts);
+      if (ok) {
+        if (api) {
+          const health = await api.getHealth();
+          if (health.ok && health.data) {
+            setSetupNote("Setup completed and router responded to /healthcheck.");
+          } else {
+            setSetupNote(
+              "Setup completed, but router is still offline. Start the router and check logs/setup.log.",
+            );
+          }
+        } else {
+          setSetupNote("Setup completed. Verify router health next.");
+        }
+      } else {
+        setSetupNote("Setup reported errors. See logs/setup.log for details.");
+      }
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          "nebuchadnezzar-setup-run",
+          JSON.stringify({ ts, ok }),
+        );
+      }
     } catch (err) {
       setSetupStatus("error");
       setSetupOutput(
         err instanceof Error ? err.message : "Setup failed unexpectedly.",
       );
+      setSetupNote("Setup failed unexpectedly. See logs/setup.log for details.");
     }
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem("nebuchadnezzar-setup-run");
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as { ts?: string; ok?: boolean };
+      if (parsed.ts) setSetupRanAt(parsed.ts);
+      if (parsed.ok) setSetupStatus("success");
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    const fetchTunnel = async () => {
+      try {
+        const res = await fetch("/api/tunnel/status");
+        const data = await res.json();
+        setTunnelStatus(data);
+      } catch (err) {
+        setTunnelStatus({
+          ok: false,
+          message:
+            err instanceof Error ? err.message : "Unable to read tunnel status.",
+        });
+      }
+    };
+    fetchTunnel();
+    const id = setInterval(fetchTunnel, 15000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -206,6 +274,16 @@ export default function Home() {
               <p className="text-xs text-slate-400">
                 Runs <code>setup.sh</code> in this project. Full log is saved to <code>logs/setup.log</code>.
               </p>
+              {setupRanAt && (
+                <p className="text-xs text-slate-500">
+                  Last setup run: {setupRanAt}
+                </p>
+              )}
+              {setupNote && (
+                <p className="text-xs text-slate-300">
+                  Next step: {setupNote}
+                </p>
+              )}
               {setupOutput && (
                 <pre className="max-h-64 overflow-auto rounded-md border border-white/10 bg-slate-950 p-3 text-xs text-slate-100">
                   {setupOutput}
@@ -213,6 +291,40 @@ export default function Home() {
               )}
             </div>
           </Card>
+
+          <Card
+            className="border border-white/10 bg-slate-900/60"
+            title="Cloudflare tunnel"
+            description="Expose the router without a public IP. Run cloudflare-tunnel.sh with your hostnames."
+          >
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+              <StatusPill tone={tunnelStatus?.ok ? "success" : "warn"}>
+                {tunnelStatus?.ok ? "Running" : "Not running"}
+              </StatusPill>
+              <span>{tunnelStatus?.message || "Run cloudflare-tunnel.sh to start."}</span>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Example: <code>CF_ROUTER_HOST=router.example.com CF_API_HOST=api.example.com ./cloudflare-tunnel.sh</code>
+            </p>
+            {tunnelStatus?.log && (
+              <pre className="mt-2 max-h-40 overflow-auto rounded-md border border-white/10 bg-slate-950 p-3 text-xs text-slate-100">
+                {tunnelStatus.log}
+              </pre>
+            )}
+          </Card>
+
+          <ProviderWizard
+            baseUrl={settings.baseUrl}
+            username={settings.username}
+            password={settings.password}
+            walletAddress={settings.walletAddress}
+            health={health}
+            balance={balance}
+            provider={primaryProvider}
+            models={models}
+            bids={bids}
+            minMorBalance={settings.minMorBalance}
+          />
 
           <HealthSummary
             readiness={readiness}
@@ -351,11 +463,9 @@ function selectPrimaryProvider(
   if (!providers.length) return undefined;
   if (!wallet) return providers[0];
   const lower = wallet.toLowerCase();
-  return (
-    providers.find(
-      (p) =>
-        p.address?.toLowerCase() === lower || p.id?.toLowerCase() === lower,
-    ) || providers[0]
+  return providers.find(
+    (p) =>
+      p.address?.toLowerCase() === lower || p.id?.toLowerCase() === lower,
   );
 }
 

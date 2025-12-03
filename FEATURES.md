@@ -4,13 +4,15 @@
 - **Stability**: stable
 - **Description**: Single-screen ops view showing router health, balances, provider readiness, models, bids, and computed readiness score.
 - **Properties**:
-  - Polls `/healthcheck`, `/blockchain/balance`, `/blockchain/providers`, `/blockchain/models`, and provider bids for the primary provider.
+  - Polls `/healthcheck`, `/blockchain/balance`, `/blockchain/providers`, `/blockchain/models` (accepts array or `{models:[…]}`), and provider bids for the primary provider.
   - Readiness score degrades if router is unhealthy, MOR balance below threshold, no models, or no active bids (rules configurable in Settings).
   - Color-coded cards for router status, MOR balance, models, and bids.
+  - Balance card includes QR/top-up affordance for MOR funding.
 - **Test Criteria**:
   - [x] Changing Settings base URL updates subsequent polls.
   - [x] Readiness score changes when balance/models/bids are missing.
   - [x] Offline router shows clear error state without crashing the page.
+  - [x] Missing auth/env defaults prompt user with next-step instructions (incl. setup script button).
 
 ## Router Detail
 - **Stability**: stable
@@ -51,6 +53,19 @@
 - **Test Criteria**:
   - [x] Saving settings persists across reloads in the same browser.
   - [x] Reset restores env defaults.
+  - [x] Blank stored creds no longer overwrite env/default auth; base URL/Basic Auth kept in sync with router.
+
+## Setup & Tooling
+- **Stability**: beta
+- **Description**: Local install/run helpers to bootstrap Morpheus/Lumerin router and dev server.
+- **Properties**:
+  - `setup.sh` installs deps (Node/Go), builds proxy-router from source, seeds `.env`, starts router, and logs to `logs/setup.log` / `logs/router.log`.
+  - API route `/api/setup` proxies script output; UI button can run and show log output.
+  - `run.sh` starts Next.js dev server on `localhost:4343` with log tail to `logs/nebuchadnezzar.log`.
+- **Test Criteria**:
+  - [x] Setup completes without manual steps when curl/node available; router responds on configured port with Basic Auth.
+  - [x] Logs are written to `logs/` and ignored by git.
+  - [x] Dev server reloads on code changes on port 4343.
 
 ## Planned / Future
 - **Stability**: planned

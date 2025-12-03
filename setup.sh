@@ -12,6 +12,9 @@ ENV_FILE="$ROOT/.env"
 ENV_TEMPLATE_URL="https://raw.githubusercontent.com/Lumerin-protocol/proxy-router/v1.8.0/.env.min.example"
 MORPHEUS_ROUTER_TAG="${MORPHEUS_ROUTER_TAG:-v5.7.0}"
 GO_VERSION="${GO_VERSION:-1.22.7}"
+IPFS_VERSION="${IPFS_VERSION:-v0.32.0}"
+IPFS_PID_FILE="$LOG_DIR/ipfs.pid"
+IPFS_LOG_FILE="$LOG_DIR/ipfs.log"
 
 mkdir -p "$LOG_DIR"
 : > "$LOG_FILE"
@@ -105,6 +108,100 @@ ensure_go() {
 }
 
 ensure_go
+
+ensure_ipfs() {
+  if command -v ipfs >/dev/null 2>&1; then
+    log "IPFS present: $(ipfs version || true)"
+    echo "$(command -v ipfs)"
+    return 0
+  fi
+
+  local os arch url tarball target ipfs_bin
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64) arch="amd64" ;;
+    arm64|aarch64) arch="arm64" ;;
+    *) arch="" ;;
+  esac
+  case "$os" in
+    linux|darwin) ;;
+    *) os="" ;;
+  esac
+  if [ -z "$os" ] || [ -z "$arch" ]; then
+    log "Unsupported platform for automatic IPFS install (os=${os} arch=${arch})."
+    return 1
+  fi
+
+  url="https://dist.ipfs.tech/kubo/${IPFS_VERSION}/kubo_${IPFS_VERSION#v}_${os}-${arch}.tar.gz"
+  tarball="$ROOT/.cache/kubo.tar.gz"
+  target="$ROOT/.cache/kubo"
+  mkdir -p "$ROOT/.cache"
+  log "Downloading IPFS ${IPFS_VERSION} from ${url}"
+  if ! curl -fSL "$url" -o "$tarball" >>"$LOG_FILE" 2>&1; then
+    log "Failed to download IPFS; install ipfs manually."
+    return 1
+  fi
+  rm -rf "$target"
+  mkdir -p "$target"
+  if ! tar -C "$target" -xzf "$tarball" >>"$LOG_FILE" 2>&1; then
+    log "Failed to extract IPFS archive."
+    return 1
+  fi
+  ipfs_bin="$(find "$target" -type f -name ipfs | head -n1)"
+  if [ -z "$ipfs_bin" ]; then
+    log "IPFS binary not found after extraction."
+    return 1
+  fi
+  mkdir -p "$BIN_DIR"
+  cp "$ipfs_bin" "$BIN_DIR/ipfs"
+  chmod +x "$BIN_DIR/ipfs"
+  log "Installed IPFS to $BIN_DIR/ipfs"
+  echo "$BIN_DIR/ipfs"
+  return 0
+}
+
+ensure_ipfs_repo() {
+  local ipfs_bin="$1"
+  local repo_dir="$ROOT/data/ipfs"
+  mkdir -p "$repo_dir"
+  if [ ! -d "$repo_dir/config" ] && [ ! -f "$repo_dir/config" ]; then
+    log "Initializing IPFS repo at $repo_dir"
+    if ! "$ipfs_bin" --repo-dir "$repo_dir" init >>"$LOG_FILE" 2>&1; then
+      log "IPFS repo init failed; check $LOG_FILE."
+      return 1
+    fi
+  fi
+  echo "$repo_dir"
+}
+
+start_ipfs_daemon() {
+  local ipfs_bin="$1"
+  local repo_dir="$2"
+
+  if [ -f "$IPFS_PID_FILE" ]; then
+    local pid
+    pid="$(cat "$IPFS_PID_FILE" 2>/dev/null || true)"
+    if [ -n "$pid" ] && ps -p "$pid" >/dev/null 2>&1; then
+      log "IPFS daemon already running (pid $pid)."
+      return 0
+    fi
+  fi
+
+  log "Starting IPFS daemon (repo: $repo_dir)..."
+  : > "$IPFS_LOG_FILE"
+  (IPFS_PATH="$repo_dir" "$ipfs_bin" daemon --enable-gc >>"$IPFS_LOG_FILE" 2>&1 & echo $!) >"$IPFS_PID_FILE"
+  sleep 2
+  local pid
+  pid="$(cat "$IPFS_PID_FILE" 2>/dev/null || true)"
+  if [ -n "$pid" ] && ps -p "$pid" >/dev/null 2>&1; then
+    log "IPFS daemon started (pid $pid). Logs: $IPFS_LOG_FILE"
+    return 0
+  fi
+
+  log "IPFS daemon failed to start; see $IPFS_LOG_FILE."
+  return 1
+}
 
 if ! command -v npm >/dev/null 2>&1; then
   log "npm not found; ensure Node/npm is installed."
@@ -428,6 +525,16 @@ start_router() {
   log "Router failed to start with '$router_bin' (see $ROUTER_LOG_FILE)."
   return 1
 }
+
+ipfs_bin="$(ensure_ipfs | tail -n1 || true)"
+if [ -n "$ipfs_bin" ] && [ -x "$ipfs_bin" ]; then
+  repo_dir="$(ensure_ipfs_repo "$ipfs_bin" || true)"
+  if [ -n "$repo_dir" ]; then
+    start_ipfs_daemon "$ipfs_bin" "$repo_dir" || true
+  fi
+else
+  log "IPFS binary unavailable; IPFS-dependent actions may fail."
+fi
 
 if command -v curl >/dev/null 2>&1; then
   log "Checking router health at $HEALTH_URL"

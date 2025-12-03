@@ -46,6 +46,7 @@ function findPrimaryProvider(
       (p) => p.address?.toLowerCase() === lower || p.id?.toLowerCase() === lower,
     );
     if (match) return match;
+    return undefined;
   }
   return providers[0];
 }
