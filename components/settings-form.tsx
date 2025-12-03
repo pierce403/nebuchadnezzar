@@ -19,10 +19,17 @@ export function SettingsForm({
   onReset,
 }: SettingsFormProps) {
   const [draft, setDraft] = useState<Settings>(settings);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (!copyMessage) return;
+    const timer = setTimeout(() => setCopyMessage(null), 2000);
+    return () => clearTimeout(timer);
+  }, [copyMessage]);
 
   const updateField = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -30,6 +37,16 @@ export function SettingsForm({
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     onChange(draft);
+  };
+
+  const copyPrivateKey = async () => {
+    if (!draft.walletPrivateKey) return;
+    try {
+      await navigator.clipboard.writeText(draft.walletPrivateKey);
+      setCopyMessage("Private key copied");
+    } catch {
+      setCopyMessage("Copy failed");
+    }
   };
 
   return (
@@ -96,6 +113,24 @@ export function SettingsForm({
               onChange={(e) => updateField("walletAddress", e.target.value)}
             />
           </label>
+          <div className="flex flex-col gap-2 rounded-md border border-white/10 bg-slate-950/60 px-3 py-2 text-xs text-slate-300">
+            <div className="flex items-center justify-between">
+              <span>
+                Wallet is stored locally; auto-generated if empty.
+              </span>
+              <button
+                type="button"
+                className="rounded-md border border-white/20 px-2 py-1 text-slate-100 hover:border-white/40"
+                onClick={copyPrivateKey}
+                disabled={!draft.walletPrivateKey}
+              >
+                Copy private key
+              </button>
+            </div>
+            {copyMessage && (
+              <span className="text-emerald-300">{copyMessage}</span>
+            )}
+          </div>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-300">MOR balance minimum</span>
             <input

@@ -28,6 +28,10 @@ export default function Home() {
   const [bids, setBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [setupStatus, setSetupStatus] = useState<
+    "idle" | "running" | "success" | "error"
+  >("idle");
+  const [setupOutput, setSetupOutput] = useState<string | null>(null);
 
   useEffect(() => {
     if (!api) return;
@@ -116,6 +120,22 @@ export default function Home() {
     balance?.tokens?.find((t) => t.symbol?.toLowerCase() === "eth")?.balance ??
     undefined;
 
+  const runSetup = async () => {
+    setSetupStatus("running");
+    setSetupOutput(null);
+    try {
+      const res = await fetch("/api/setup", { method: "POST" });
+      const data = await res.json();
+      setSetupOutput(data?.output || "");
+      setSetupStatus(data?.ok ? "success" : "error");
+    } catch (err) {
+      setSetupStatus("error");
+      setSetupOutput(
+        err instanceof Error ? err.message : "Setup failed unexpectedly.",
+      );
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -140,6 +160,60 @@ export default function Home() {
 
       {hydrated && (
         <>
+          {hydrated && !loading && (!health || health.status === "Offline") && (
+            <Card
+              className="border-amber-500/40 bg-amber-500/10"
+              title="Health check failed"
+              description="Follow these steps to get the dashboard working:"
+            >
+              <ul className="space-y-1 text-sm text-amber-100">
+                <li>1) Confirm the proxy router is running and bound to {settings.baseUrl || "your configured host"}.</li>
+                <li>2) Open Settings and verify the base URL, port, and any basic auth match the router.</li>
+                <li>3) If running locally, ensure the process listens on the same interface (e.g., localhost).</li>
+                <li>4) Click “Run setup & verify” below to auto-install deps and try starting the proxy router locally.</li>
+                <li>5) Restart the router service, then refresh this page.</li>
+              </ul>
+            </Card>
+          )}
+
+          <Card
+            className="border border-white/10 bg-slate-900/60"
+            title="Setup & diagnostics"
+            description="Auto-install dependencies, copy .env defaults, and check the router health endpoint."
+          >
+            <div className="flex flex-col gap-3 text-sm text-slate-300">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={runSetup}
+                  disabled={setupStatus === "running"}
+                  className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {setupStatus === "running"
+                    ? "Running setup..."
+                    : "Run setup & verify"}
+                </button>
+                {setupStatus === "success" && (
+                  <StatusPill tone="success">Setup complete</StatusPill>
+                )}
+                {setupStatus === "error" && (
+                  <StatusPill tone="danger">Setup encountered issues</StatusPill>
+                )}
+                {setupStatus === "idle" && (
+                  <StatusPill tone="warn">Awaiting setup</StatusPill>
+                )}
+              </div>
+              <p className="text-xs text-slate-400">
+                Runs <code>setup.sh</code> in this project. Full log is saved to <code>logs/setup.log</code>.
+              </p>
+              {setupOutput && (
+                <pre className="max-h-64 overflow-auto rounded-md border border-white/10 bg-slate-950 p-3 text-xs text-slate-100">
+                  {setupOutput}
+                </pre>
+              )}
+            </div>
+          </Card>
+
           <HealthSummary
             readiness={readiness}
             health={health}
@@ -150,6 +224,7 @@ export default function Home() {
             )}
             bids={bids}
             minMorBalance={settings.minMorBalance}
+            walletAddress={settings.walletAddress}
           />
 
           {error && (

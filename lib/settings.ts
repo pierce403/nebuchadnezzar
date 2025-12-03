@@ -10,6 +10,7 @@ export interface Settings {
   username?: string;
   password?: string;
   walletAddress?: string;
+  walletPrivateKey?: string;
   minMorBalance: number;
   configUrl?: string;
   lumerinConfigUrl?: string;

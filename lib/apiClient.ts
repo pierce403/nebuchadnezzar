@@ -46,6 +46,25 @@ export function createApiClient(settings: Settings) {
   const auth = buildAuthHeader(settings);
   const headers = auth ? { Authorization: auth } : undefined;
 
+  function unwrapArray<T>(value: unknown, key: string): T[] {
+    if (Array.isArray(value)) return value as T[];
+    if (value && typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      const nested = obj[key];
+      if (Array.isArray(nested)) return nested as T[];
+    }
+    return [];
+  }
+
+  async function normalizeArray<T>(
+    promise: Promise<ApiResult<unknown>>,
+    key: string,
+  ): Promise<ApiResult<T[]>> {
+    const res = await promise;
+    if (!res.ok) return res as ApiResult<T[]>;
+    return { ok: true, data: unwrapArray<T>(res.data, key) };
+  }
+
   async function request<T>(
     pathOrUrl: string,
     init?: RequestInit & { timeoutMs?: number },
@@ -101,8 +120,10 @@ export function createApiClient(settings: Settings) {
   return {
     getHealth: () => request<RouterHealth>("/healthcheck"),
     getBalance: () => request<BlockchainBalance>("/blockchain/balance"),
-    getProviders: () => request<Provider[]>("/blockchain/providers"),
-    getModels: () => request<Model[]>("/blockchain/models"),
+    getProviders: () =>
+      normalizeArray<Provider>(request("/blockchain/providers"), "providers"),
+    getModels: () =>
+      normalizeArray<Model>(request("/blockchain/models"), "models"),
     getProviderBids: (providerId: string) =>
       request<Bid[]>(`/blockchain/providers/${providerId}/bids`),
     getConfig: () => {

@@ -11,6 +11,7 @@ export const envDefaults: Settings = {
   username: process.env.NEXT_PUBLIC_MOR_PROXY_USERNAME || "",
   password: process.env.NEXT_PUBLIC_MOR_PROXY_PASSWORD || "",
   walletAddress: process.env.NEXT_PUBLIC_MOR_WALLET_ADDRESS || "",
+  walletPrivateKey: "",
   minMorBalance: numberFromEnv(process.env.NEXT_PUBLIC_MIN_MOR_BALANCE, 1),
   configUrl: process.env.NEXT_PUBLIC_MOR_PROXY_CONFIG_URL || "",
   lumerinConfigUrl: process.env.NEXT_PUBLIC_LUMERIN_CONFIG_URL || "http://localhost:8080/config",

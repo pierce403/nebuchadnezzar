@@ -10,6 +10,7 @@ import {
 } from "react";
 import { buildDefaultSettings, sanitizeBaseUrl } from "@/lib/config";
 import { SETTINGS_STORAGE_KEY, Settings } from "@/lib/settings";
+import { generateWallet } from "@/lib/wallet";
 
 interface SettingsContextValue {
   settings: Settings;
@@ -42,6 +43,22 @@ export function SettingsProvider({ children }: PropsWithChildren) {
       setHydrated(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (settings.walletAddress) return;
+    const generated = generateWallet();
+    setSettings((prev) => {
+      const merged = mergeSettings(prev, {
+        walletAddress: generated.address,
+        walletPrivateKey: generated.privateKey,
+      });
+      if (typeof window !== "undefined") {
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
+      }
+      return merged;
+    });
+  }, [hydrated, settings.walletAddress]);
 
   const updateSettings = (next: Partial<Settings>) => {
     setSettings((prev) => {
@@ -84,9 +101,19 @@ function mergeSettings(
   current: Settings,
   next: Partial<Settings>,
 ): Settings {
+  const username =
+    next.username === undefined || next.username === ""
+      ? current.username
+      : next.username;
+  const password =
+    next.password === undefined || next.password === ""
+      ? current.password
+      : next.password;
   return {
     ...current,
     ...next,
+    username,
+    password,
     readinessRules: {
       ...current.readinessRules,
       ...(next.readinessRules || {}),

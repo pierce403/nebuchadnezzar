@@ -1,5 +1,9 @@
+"use client";
+
 import { BlockchainBalance, Bid, Model, Provider, ReadinessDetails, RouterHealth } from "@/lib/types";
-import { formatNumber, formatUptime } from "@/lib/utils";
+import { formatNumber, formatUptime, shortAddress } from "@/lib/utils";
+import QRCode from "qrcode";
+import { useRef, useState } from "react";
 import { Card } from "./card";
 import { StatusPill } from "./status-pill";
 
@@ -11,6 +15,7 @@ interface HealthSummaryProps {
   models?: Model[];
   bids?: Bid[];
   minMorBalance: number;
+  walletAddress?: string;
 }
 
 function readinessTone(label: ReadinessDetails["label"]) {
@@ -41,6 +46,7 @@ export function HealthSummary({
   models,
   bids,
   minMorBalance,
+  walletAddress,
 }: HealthSummaryProps) {
   const tone = readinessTone(readiness.label);
   const isOnline = Boolean(health && (health.status || health.uptime));
@@ -48,6 +54,42 @@ export function HealthSummary({
   const activeModels = models?.length ?? provider?.models?.length ?? 0;
   const activeBids =
     bids?.length ?? provider?.bids?.length ?? 0;
+  const [showQr, setShowQr] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
+  const qrRequestId = useRef(0);
+
+  const toggleQr = async () => {
+    if (showQr) {
+      setShowQr(false);
+      return;
+    }
+
+    setShowQr(true);
+    const target = walletAddress?.trim();
+    if (!target) {
+      setQrError("Set a wallet in Settings to generate a QR code.");
+      setQrDataUrl(null);
+      return;
+    }
+
+    setQrError(null);
+    setQrDataUrl(null);
+    const payload = target.startsWith("ethereum:") ? target : `ethereum:${target}`;
+    const requestId = qrRequestId.current + 1;
+    qrRequestId.current = requestId;
+
+    try {
+      const data = await QRCode.toDataURL(payload, { margin: 1, width: 240 });
+      if (qrRequestId.current === requestId) {
+        setQrDataUrl(data);
+      }
+    } catch {
+      if (qrRequestId.current === requestId) {
+        setQrError("Unable to generate QR code right now.");
+      }
+    }
+  };
 
   return (
     <Card
@@ -106,14 +148,73 @@ export function HealthSummary({
           title="MOR Balance"
           description={`Min ${formatNumber(minMorBalance, 2)} MOR`}
         >
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-lg font-semibold text-slate-50">
-              {formatNumber(mor, 3)} MOR
-            </span>
-            <StatusPill tone={mor >= minMorBalance ? "success" : "warn"}>
-              {mor >= minMorBalance ? "Healthy" : "Low"}
-            </StatusPill>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-lg font-semibold text-slate-50">
+                {formatNumber(mor, 3)} MOR
+              </span>
+              <StatusPill tone={mor >= minMorBalance ? "success" : "warn"}>
+                {mor >= minMorBalance ? "Healthy" : "Low"}
+              </StatusPill>
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span className="truncate">
+                {walletAddress
+                  ? `Wallet ${shortAddress(walletAddress, 6)}`
+                  : "Set wallet in Settings"}
+              </span>
+              <button
+                type="button"
+                className="rounded-md border border-sky-400/50 px-2 py-1 text-xs font-medium text-sky-200 transition hover:border-sky-300 hover:text-sky-50 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-600"
+                onClick={toggleQr}
+                disabled={!walletAddress}
+              >
+                {showQr ? "Hide QR" : "Fund via QR"}
+              </button>
+            </div>
           </div>
+          {showQr && (
+            <div className="mt-3 rounded-md border border-white/10 bg-slate-950/70 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-xs text-slate-300">
+                  <p className="font-semibold text-slate-100">
+                    Scan to fund MOR
+                  </p>
+                  <p className="mt-1 break-all text-slate-400">
+                    {walletAddress || "Add a wallet address first."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-slate-400 transition hover:text-slate-200"
+                  onClick={() => setShowQr(false)}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="mt-3 flex items-center justify-center rounded-md bg-slate-900/80 p-3">
+                {qrError && (
+                  <span className="text-xs text-rose-300">{qrError}</span>
+                )}
+                {!qrError && (
+                  <>
+                    {qrDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={qrDataUrl}
+                        alt="Wallet QR code"
+                        className="h-48 w-48 rounded-md border border-white/5 bg-slate-950 p-2"
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-400">
+                        Generating QR…
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </Card>
 
         <Card
