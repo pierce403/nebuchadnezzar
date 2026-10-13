@@ -11,7 +11,7 @@ import {
 } from "./types";
 
 const DEFAULT_TIMEOUT = 8000;
-const WEI = 1_000_000_000_000_000_000n;
+const WEI = BigInt("1000000000000000000");
 
 function buildAuthHeader(settings: Settings) {
   if (!settings.username) return undefined;

@@ -178,6 +178,8 @@ export default function Home() {
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw) as { ts?: string; ok?: boolean };
+      // Restore browser-only setup state after hydration.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (parsed.ts) setSetupRanAt(parsed.ts);
       if (parsed.ok) setSetupStatus("success");
     } catch {
