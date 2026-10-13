@@ -179,7 +179,7 @@ export function ProviderWizard({
 
   function weiFromMor(amount: number) {
     const scaled = Math.round(amount * 1e9); // support up to 9 decimals
-    return (BigInt(scaled) * 1_000_000_000n).toString();
+    return (BigInt(scaled) * BigInt(1_000_000_000)).toString();
   }
 
   async function startRouter() {

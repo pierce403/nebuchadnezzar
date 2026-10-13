@@ -12,15 +12,16 @@ export function useHealthPoller(intervalMs?: number) {
 
   useEffect(() => {
     if (!api) return;
+    const client = api;
     let cancelled = false;
 
     async function poll() {
       while (!cancelled) {
         const ts = new Date();
         const [health, balance, providers] = await Promise.all([
-          api.getHealth(),
-          api.getBalance(),
-          api.getProviders(),
+          client.getHealth(),
+          client.getBalance(),
+          client.getProviders(),
         ]);
 
         setEntries((prev) => {

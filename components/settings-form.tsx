@@ -22,6 +22,8 @@ export function SettingsForm({
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    // Refresh the draft only when the parent settings change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(settings);
   }, [settings]);
 

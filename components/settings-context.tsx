@@ -35,6 +35,8 @@ export function SettingsProvider({ children }: PropsWithChildren) {
       const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<Settings>;
+        // Browser storage is available only after hydration.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSettings((prev) => mergeSettings(prev, parsed));
       }
     } catch (err) {
@@ -48,6 +50,8 @@ export function SettingsProvider({ children }: PropsWithChildren) {
     if (!hydrated) return;
     if (settings.walletAddress) return;
     const generated = generateWallet();
+    // Keep wallet generation after hydration to avoid server-side key creation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSettings((prev) => {
       const merged = mergeSettings(prev, {
         walletAddress: generated.address,
